@@ -313,11 +313,15 @@ const ChatInput = memo(function ChatInput({
     assistants
   } = useAssistant()
 
-  // Agent mode
-  // Use TEMPORARY_CHAT_ID as fallback key on the home screen (same pattern as attachments)
+  // Agent mode is keyed by thread. On the home screen, always use the
+  // temporary-chat entry: currentThreadId can still point at the conversation
+  // the user just left while its background turn is running.
   const agentModeKey = currentThreadId ?? TEMPORARY_CHAT_ID
   const isAgentMode = useAgentMode((state) =>
     state.agentThreads[agentModeKey] === true
+  )
+  const temporaryAgentMode = useAgentMode(
+    (state) => state.agentThreads[TEMPORARY_CHAT_ID] === true
   )
   // When projectId is present, treat as normal chat (disable agent mode UI)
   const effectiveAgentMode = isAgentMode && !projectId
@@ -730,10 +734,10 @@ const ChatInput = memo(function ChatInput({
           JSON.stringify(messagePayload)
         )
         sessionStorage.setItem('temp-chat-nav', 'true')
-        // Transfer agent mode from home screen to temporary thread
-        if (isAgentMode && agentModeKey !== TEMPORARY_CHAT_ID) {
+        // Transfer the home-screen mode, not a stale mode from the thread
+        // that is still running in the background.
+        if (temporaryAgentMode) {
           useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, true)
-          useAgentMode.getState().removeThread(agentModeKey)
         }
         router.navigate({
           to: route.threadsDetail,
@@ -782,10 +786,17 @@ const ChatInput = memo(function ChatInput({
           projectMetadata
         )
 
-        // Transfer agent mode from home screen to the new thread
-        if (isAgentMode) {
+        // Transfer only the home-screen mode. currentThreadId may still name
+        // the previous conversation while its turn continues in the background.
+        // Project chats explicitly disable agent mode.
+        if (temporaryAgentMode && !projectId) {
           useAgentMode.getState().setAgentMode(newThread.id, true)
-          useAgentMode.getState().removeThread(agentModeKey)
+        }
+        // The temporary entry is a draft for the next conversation, so consume
+        // it after the new thread has received it. Never remove the old thread's
+        // mode: that thread may still be running and must retain its own state.
+        if (temporaryAgentMode) {
+          useAgentMode.getState().removeThread(TEMPORARY_CHAT_ID)
         }
 
         // Store the initial message for the new thread

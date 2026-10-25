@@ -7,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react'
 import '@testing-library/jest-dom'
+import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 
 // --- Module mocks (must be declared before component import) ---------------
 
@@ -111,12 +112,21 @@ vi.mock('@/hooks/useAssistant', () => ({
   }),
 }))
 
-let agentModeOn = false
+let agentThreads: Record<string, boolean> = {}
+const setAgentModeMock = vi.fn((threadId: string, enabled: boolean) => {
+  if (enabled) agentThreads[threadId] = true
+  else delete agentThreads[threadId]
+})
+const removeAgentThreadMock = vi.fn((threadId: string) => {
+  delete agentThreads[threadId]
+})
 vi.mock('@/hooks/useAgentMode', () => ({
   useAgentMode: (selector: any) =>
     selector({
-      agentThreads: agentModeOn ? { 'thread-1': true } : {},
+      agentThreads,
       toggleAgentMode: vi.fn(),
+      setAgentMode: setAgentModeMock,
+      removeThread: removeAgentThreadMock,
     }),
 }))
 
@@ -335,7 +345,9 @@ const resetAll = () => {
   attachmentsList = []
   attachmentsByKey = {}
   readKeys = []
-  agentModeOn = false
+  agentThreads = {}
+  setAgentModeMock.mockClear()
+  removeAgentThreadMock.mockClear()
   selectedModelOverride = {
     id: 'model-a',
     capabilities: ['tools'],
@@ -359,9 +371,20 @@ const getTextarea = () =>
 const renderInput = (props: any = {}) =>
   render(<ChatInput onSubmit={props.onSubmit} onStop={props.onStop} {...props} />)
 
+const setPromptAndSubmit = async (text: string) => {
+  promptState = text
+  renderInput()
+  fireEvent.click(
+    document.querySelector('[data-test-id="send-message-button"]') as HTMLElement
+  )
+  await waitFor(() => expect(createThreadMock).toHaveBeenCalled())
+}
+
 describe('ChatInput', () => {
   beforeEach(() => {
     resetAll()
+    createThreadMock.mockReset()
+    createThreadMock.mockResolvedValue({ id: 'new-thread' })
   })
 
   it('renders the textarea with placeholder and send button', () => {
@@ -371,6 +394,38 @@ describe('ChatInput', () => {
     expect(ta).toHaveAttribute('placeholder', 'common:placeholder.chatInput')
     // send button is present
     expect(document.querySelector('[data-test-id="send-message-button"]')).toBeTruthy()
+  })
+
+  it('does not transfer the previous thread agent mode into a new conversation', async () => {
+    agentThreads = { 'thread-1': true }
+
+    await setPromptAndSubmit('new conversation')
+
+    expect(setAgentModeMock).not.toHaveBeenCalledWith('new-thread', true)
+  })
+
+  it('transfers explicit temporary-chat agent mode into a new conversation', async () => {
+    agentThreads = { [TEMPORARY_CHAT_ID]: true }
+
+    await setPromptAndSubmit('new conversation')
+
+    expect(setAgentModeMock).toHaveBeenCalledWith('new-thread', true)
+    expect(removeAgentThreadMock).toHaveBeenCalledWith(TEMPORARY_CHAT_ID)
+  })
+
+  it('does not transfer agent mode into a new project conversation', async () => {
+    agentThreads = { [TEMPORARY_CHAT_ID]: true }
+
+    await (async () => {
+      promptState = 'project conversation'
+      renderInput({ projectId: 'project-1' })
+      fireEvent.click(
+        document.querySelector('[data-test-id="send-message-button"]') as HTMLElement
+      )
+      await waitFor(() => expect(createThreadMock).toHaveBeenCalled())
+    })()
+
+    expect(setAgentModeMock).not.toHaveBeenCalledWith('new-thread', true)
   })
 
   it('shows the project assistant for a new conversation', () => {

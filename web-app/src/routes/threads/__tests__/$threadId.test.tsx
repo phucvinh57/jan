@@ -2615,6 +2615,31 @@ describe('ThreadDetail route', () => {
     expect(sessionStorage.getItem('initial-message-thread-1')).toBeNull()
   })
 
+  it('processes the next thread initial message when the reused route changes threads', async () => {
+    sessionStorage.setItem(
+      'initial-message-thread-1',
+      JSON.stringify({ text: 'first thread' })
+    )
+    const view = renderComponent()
+    await waitFor(() => {
+      expect(h.mockSendMessage).toHaveBeenCalledTimes(1)
+    })
+
+    h.routeParams.threadId = 'thread-2'
+    sessionStorage.setItem(
+      'initial-message-thread-2',
+      JSON.stringify({ text: 'second thread' })
+    )
+    h.mockSendMessage.mockClear()
+    const Component = Route.component as React.ComponentType
+    view.rerender(<Component />)
+
+    await waitFor(() => {
+      expect(h.mockSendMessage).toHaveBeenCalledTimes(1)
+    })
+    expect(sessionStorage.getItem('initial-message-thread-2')).toBeNull()
+  })
+
   it('clears queue on unmount', () => {
     const { unmount } = renderComponent()
     unmount()
