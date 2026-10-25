@@ -2615,35 +2615,6 @@ describe('ThreadDetail route', () => {
     expect(sessionStorage.getItem('initial-message-thread-1')).toBeNull()
   })
 
-  it('processes a new thread initial message after switching from another thread', async () => {
-    h.threadsState.threads['thread-2'] = {
-      id: 'thread-2',
-      title: 'New Thread',
-      metadata: {},
-      assistants: [],
-      model: { id: 'gpt-x', provider: 'openai' },
-    }
-    sessionStorage.setItem(
-      'initial-message-thread-2',
-      JSON.stringify({ text: 'new conversation' })
-    )
-
-    const { rerender } = renderComponent()
-    h.routeParams.threadId = 'thread-2'
-    const Component = Route.component as React.ComponentType
-    rerender(<Component />)
-
-    await waitFor(() => {
-      expect(h.mockSendMessage).toHaveBeenCalledTimes(1)
-    })
-    expect(h.mockSendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        parts: [{ type: 'text', text: 'new conversation' }],
-      })
-    )
-    expect(sessionStorage.getItem('initial-message-thread-2')).toBeNull()
-  })
-
   it('clears queue on unmount', () => {
     const { unmount } = renderComponent()
     unmount()

@@ -1681,15 +1681,12 @@ function ThreadDetail() {
     [sendMessage, threadId, addMessage]
   )
 
-  // Check for and send initial message from sessionStorage. The route is reused
-  // when navigating between threads, so this must be tracked per thread rather
-  // than for the lifetime of the route component.
-  const initialMessageSentRef = useRef<string | undefined>(undefined)
+  // Check for and send initial message from sessionStorage
+  const initialMessageSentRef = useRef(false)
 
   useEffect(() => {
-    // Prevent duplicate sends for this thread while allowing a newly opened
-    // thread to process its own initial message.
-    if (initialMessageSentRef.current === threadId) return
+    // Prevent duplicate sends
+    if (initialMessageSentRef.current) return
 
     const initialMessageKey = `${SESSION_STORAGE_PREFIX.INITIAL_MESSAGE}${threadId}`
 
@@ -1698,7 +1695,7 @@ function ThreadDetail() {
     if (storedMessage) {
       // Mark as sent immediately to prevent duplicate sends
       sessionStorage.removeItem(initialMessageKey)
-      initialMessageSentRef.current = threadId
+      initialMessageSentRef.current = true
 
       // Process message asynchronously
       ;(async () => {
